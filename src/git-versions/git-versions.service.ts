@@ -6,6 +6,7 @@ import { CommitInfo } from './dto/commit-info.dto';
 import { ReleaseInfo } from './dto/release-info.dto';
 import { PullInfo } from './dto/pull-info.dto';
 import { ArtifactInfo } from './dto/artifact-info.dto';
+import { PaginationDto } from '../common/Pagination';
 
 @Injectable()
 export class GitVersionsService {
@@ -42,9 +43,11 @@ export class GitVersionsService {
           );
   }
 
-  getReleases(user: string, repo: string, includePreReleases: boolean): Observable<ReleaseInfo[]> {
+  getReleases(user: string, repo: string, includePreReleases: boolean, pagination: PaginationDto): Observable<ReleaseInfo[]> {
       this.logger.debug(`Trying to fetch releases for ${user}/${repo}`);
 
+      // Fetch GH releases
+      // We need to fetch all and can't use GH pagination because we filter for pre-releases, which GH API doesn't support
       return this.http.get<any>(`https://api.github.com/repos/${user}/${repo}/releases`, { headers: this.headers })
           .pipe(
               tap((response) => this.logger.debug(`Response status ${response.status} for GitHub commit request`)),
@@ -54,13 +57,14 @@ export class GitVersionsService {
                   response.data.filter((rel) => includePreReleases || !rel.prerelease).forEach((rel) => {
                       releases.push({
                           name: rel.name,
+                          isPreRelease: rel.prerelease,
                           htmlUrl: rel.html_url,
                           publishedAt: rel.published_at,
                           body: rel.body,
                       });
                   });
 
-                  return releases;
+                  return releases.slice(pagination.skip, pagination.skip + pagination.take);
               }),
               catchError(
                   (err) => {
